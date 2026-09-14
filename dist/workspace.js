@@ -72,7 +72,7 @@ function renderDetailPages(snapshot, state = 'idle') {
   const r = snapshot;
   const addresses = r.dns.records.filter(record=>['A','AAAA'].includes(record.type));
   const uniqueIPs = new Set(addresses.map(record=>record.value));
-  const environment = [['Web server',r.environment.server],['Powered by',r.environment.poweredBy],['Source URL',r.headersUrl]];
+  const environment = [['Server header',r.environment.server],['Powered by',r.environment.poweredBy],['Source URL',r.headersUrl]];
   $('#view-infrastructure').innerHTML = metrics([['Public addresses observed',uniqueIPs.size],['CDN / proxy',cdnPresentation(r).label],['Registered server',r.mapping?.server ? r.mapping.server+' · '+r.mapping.provider : 'Not registered']])+
     '<div class="detail-grid">'+
     detailCard('Public endpoints','network',addresses.length?table(['Host','Type','Address','TTL (s)'],addresses.map(a=>[a.name,a.type,a.value,a.ttl])):empty('No public addresses were verified. The DNS page shows each query outcome.'),true)+

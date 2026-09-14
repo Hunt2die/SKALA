@@ -38,3 +38,13 @@ export const privateAddress = { async test() {
   check(report.https.error?.code === 'blocked_target' && report.http.error?.code === 'blocked_target', 'Private addresses must remain blocked');
   check(!report.https.steps.length && !report.http.steps.length, 'A private hostname must never be requested');
 }};
+
+export const headerOnlyCloudflare = { async test() {
+  const report = await scanSite('header-only.example.com');
+  check(report.summary.state === 'reachable' && report.summary.status === 200, 'Header signals must not change website reachability');
+  check(report.headers.server === 'cloudflare' && report.headers['cf-ray'], 'Keep the response evidence');
+  check(report.cdn.state === 'possible' && report.cdn.provider === null, 'Multiple headers must not confirm Cloudflare');
+  check(report.cdn.basis === 'headers-only', 'Expose the basis for the unconfirmed signal');
+  check(report.cdn.dnsAddresses[0].address === '185.107.91.213' && report.cdn.dnsAddresses[0].cloudflareRange === null,
+    'Include the contradictory network evidence');
+}};

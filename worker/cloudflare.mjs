@@ -43,13 +43,13 @@ export function detectCloudflare(hostname, queries, traces) {
   function observe(name) {
     const evidence = [];
     const addresses = queries.filter(q => q.name === name && ['A','AAAA'].includes(q.type) && q.state === 'ok')
-      .flatMap(q => q.records);
+      .flatMap(q => q.records.map(record => ({ hostname: name, type: q.type, address: record.value,
+        cloudflareRange: cloudflareNetwork(record.value) })));
     for (const record of addresses) {
-      const range = cloudflareNetwork(record.value);
-      if (range) evidence.push({ kind: 'network', value: record.value, source: name + ' DNS', range });
+      if (record.cloudflareRange) evidence.push({ kind: 'network', value: record.address,
+        source: name + ' DNS', range: record.cloudflareRange });
     }
     const responses = steps.filter(step => normalHost(new URL(step.url).hostname) === name);
-    let headerMatch = false;
     for (const step of responses) {
       const h = step.headers;
       const signals = [
@@ -57,23 +57,30 @@ export function detectCloudflare(hostname, queries, traces) {
         ['cf-ray', /^[a-f0-9]{16,32}(?:-[a-z]{3})?$/i.test(h['cf-ray'] || '')],
         ['cf-cache-status', /^(HIT|MISS|DYNAMIC|BYPASS|EXPIRED|STALE|UPDATING|REVALIDATED|NONE|UNKNOWN)$/i.test(h['cf-cache-status'] || '')],
       ].filter(([, present]) => present);
-      if (signals.length >= 2) headerMatch = true;
       for (const [key] of signals) evidence.push({ kind: 'header', value: key + ': ' + h[key], source: step.url });
     }
-    const state = evidence.some(item => item.kind === 'network') || headerMatch ? 'detected'
+    // Multiple headers from one request path are not independent corroboration.
+    // In particular, a Worker may observe headers from intermediaries on its own path.
+    // Require a DNS address in a published Cloudflare range for this exact hostname.
+    const networkMatch = evidence.some(item => item.kind === 'network');
+    const state = networkMatch ? 'detected'
       : evidence.length ? 'possible' : responses.length || addresses.length ? 'not_observed' : 'unverified';
-    return { hostname: name, state, evidence };
+    return { hostname: name, state, basis: networkMatch ? 'dns-network' : evidence.length ? 'headers-only' : null,
+      dnsAddresses: addresses, evidence };
   }
   const result = observe(host);
   const ns = queries.filter(q => q.type === 'NS' && q.state === 'ok').flatMap(q => q.records)
     .filter(record => /\.ns\.cloudflare\.com\.?$/i.test(record.value));
   // Nameservers and resolver identity must never become proxy detections.
-  if (ns.length && ['not_observed','unverified'].includes(result.state)) result.state = 'dns_observed';
-  return { ...result, provider: ['detected','possible','dns_observed'].includes(result.state) ? 'Cloudflare' : null,
+  if (ns.length && ['not_observed','unverified'].includes(result.state)) {
+    result.state = 'dns_observed';
+    result.basis = 'nameservers-only';
+  }
+  return { ...result, provider: result.state === 'detected' ? 'Cloudflare' : null,
     dnsProvider: ns.length ? 'Cloudflare' : null,
     dnsEvidence: ns.map(record => ({ kind: 'nameserver', value: record.value, source: record.name })),
     otherHosts: [...new Set(steps.map(step => normalHost(new URL(step.url).hostname)))]
       .filter(name => name !== host).map(observe).filter(item => ['detected','possible'].includes(item.state)),
     networkListCheckedAt: '2026-09-14',
-    detail: 'Cloudflare network and response-header signals identify the public-facing layer. Headers can be changed or imitated; WAF settings and origin hosting are not verified.' };
+    detail: 'Cloudflare detection requires a DNS address in a published Cloudflare proxy range for the named host. Headers alone remain unconfirmed: intermediaries on the probe request path can supply them. A non-matching address does not rule out all Cloudflare services or custom IP configurations. WAF settings and origin hosting are not verified.' };
 }

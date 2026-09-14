@@ -233,3 +233,63 @@ test('Cloudflare shield, server source and export agree; new and failed scans re
   await h.run('runScan("alpha.example.com")');
   assert.equal(h.get('#cdnBadge').innerHTML,'');
 });
+
+test('header-only Cloudflare signals show an unconfirmed info badge, DNS evidence and faithful export', async () => {
+  const result=await scanSite('alpha.example.com',{fetcher:async input=>{
+    const u=new URL(input);
+    if(u.hostname==='cloudflare-dns.com') return Response.json({Status:0,Answer:u.searchParams.get('type')==='A'
+      ? [{name:u.searchParams.get('name'),type:1,data:'185.107.91.213',TTL:300}]:[]});
+    return new Response(null,{status:200,headers:{server:'cloudflare','cf-ray':'aabbccdd11223344-AMS','cf-cache-status':'DYNAMIC'}});
+  }});
+  const queue=[{...result,build},await snapshot()];
+  const h=harness(async path=>path==='/api/health'?freshHealth():Response.json(queue.shift()));
+  await h.run('runScan("alpha.example.com")');
+  assert.equal(h.get('#cdnBadge').hidden,false);
+  assert.equal(h.get('#cdnBadge').dataset.state,'unconfirmed');
+  assert.match(h.get('#cdnBadge').innerHTML,/Cloudflare unconfirmed/);
+  assert.match(h.get('#cdnBadge').innerHTML,/i-info/);
+  assert.doesNotMatch(h.get('#cdnBadge').innerHTML,/i-shield/);
+  assert.equal(h.get('#cdnNotice').hidden,true);
+  assert.equal(h.get('#cdnNotice').innerHTML,'');
+  assert.equal(h.get('#statusCard').dataset.state,'reachable');
+  assert.match(h.get('#environmentPanel .panel-content').innerHTML,/Server header/);
+  assert.match(h.get('#environmentPanel .panel-content').innerHTML,/cloudflare/);
+  assert.match(h.get('#view-infrastructure').innerHTML,/Cloudflare unconfirmed/);
+  const evidence=h.run('detail("cdn").html');
+  assert.match(evidence,/185\.107\.91\.213/);
+  assert.match(evidence,/No published range match/);
+  assert.match(evidence,/cf-ray: aabbccdd11223344-AMS/);
+  h.run('exportReport()');
+  const exported=JSON.parse(await h.blob().text());
+  assert.equal(exported.cdn.state,'possible');
+  assert.equal(exported.cdn.provider,null);
+  assert.equal(exported.cdn.basis,'headers-only');
+  assert.equal(exported.cdn.dnsAddresses[0].address,'185.107.91.213');
+  assert.equal(exported.cdn.dnsAddresses[0].cloudflareRange,null);
+  assert.equal(exported.headers.server,'cloudflare');
+  await h.run('runScan("alpha.example.com")');
+  assert.equal(h.get('#cdnBadge').hidden,true);
+  assert.equal(h.get('#cdnNotice').hidden,true);
+});
+
+test('confirmed redirect networks take priority over ambiguous entry headers without misattribution', async () => {
+  const result=await scanSite('alpha.example.com',{fetcher:async input=>{
+    const u=new URL(input);
+    if(u.hostname==='cloudflare-dns.com') {
+      const name=u.searchParams.get('name');
+      return Response.json({Status:0,Answer:u.searchParams.get('type')==='A'
+        ? [{name,type:1,data:name==='elsewhere.example.net'?'104.16.1.2':'185.107.91.213',TTL:300}]:[]});
+    }
+    return u.hostname==='alpha.example.com'
+      ? new Response(null,{status:302,headers:{location:'https://elsewhere.example.net/',server:'cloudflare','cf-ray':'aabbccdd11223344-AMS'}})
+      : new Response(null,{status:200});
+  }});
+  const h=harness(async path=>path==='/api/health'?freshHealth():Response.json({...result,build}));
+  await h.run('runScan("alpha.example.com")');
+  assert.equal(h.get('#cdnNotice').hidden,false);
+  assert.match(h.get('#cdnNotice').innerHTML,/Cloudflare on redirect/);
+  assert.match(h.get('#cdnNotice').innerHTML,/redirect host elsewhere\.example\.net/);
+  assert.match(h.get('#cdnNotice').innerHTML,/does not establish proxy use on alpha\.example\.com/);
+  assert.equal(h.run('report.cdn.state'),'possible');
+  assert.equal(h.run('report.cdn.otherHosts[0].state'),'detected');
+});

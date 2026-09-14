@@ -232,6 +232,8 @@ test('proxy detection uses target evidence; resolver choice and nameservers alon
   const nsQuery = value => ({ name:domain,type:'NS',state:'ok',records:[{name:domain,type:'NS',value}] });
   const dnsOnly = detectCloudflare(domain,[nsQuery('ada.ns.cloudflare.com.')],[plain.https,plain.http]);
   assert.equal(dnsOnly.state,'dns_observed');
+  assert.equal(dnsOnly.provider,null);
+  assert.equal(dnsOnly.basis,'nameservers-only');
   assert.equal(dnsOnly.evidence.length,0);
   assert.equal(dnsOnly.dnsEvidence.length,1);
   const lookalike = detectCloudflare(domain,[nsQuery('ada.ns.cloudflare.com.evil.test')],[plain.https,plain.http]);
@@ -244,26 +246,73 @@ test('Cloudflare headers and public addresses produce scoped, exportable evidenc
   const viaHeaders = await scanSite(domain,{fetcher:fixture({page:()=>response(403,{
     server:'cloudflare','cf-ray':'aabbccdd11223344-AMS','cf-cache-status':'DYNAMIC',
   })}).fetcher});
-  assert.equal(viaHeaders.cdn.state,'detected');
+  assert.equal(viaHeaders.cdn.state,'possible');
+  assert.equal(viaHeaders.cdn.provider,null);
   assert.equal(viaHeaders.summary.state,'restricted');
   assert.equal(viaHeaders.cdn.hostname,domain);
   assert.ok(viaHeaders.cdn.evidence.every(e=>e.source.startsWith('http')));
   assert.equal(viaHeaders.mapping.server,null);
   const networkOnly = await scanSite(domain,{fetcher:fixture({address:'104.16.1.2'}).fetcher});
   assert.equal(networkOnly.cdn.state,'detected');
+  assert.equal(networkOnly.cdn.provider,'Cloudflare');
+  assert.equal(networkOnly.cdn.basis,'dns-network');
   assert.ok(networkOnly.cdn.evidence.some(e=>e.kind==='network' && e.range==='104.16.0.0/13'));
   const single = await scanSite(domain,{fetcher:fixture({page:()=>response(200,{server:'cloudflare'})}).fetcher});
   assert.equal(single.cdn.state,'possible');
 });
 
-test('Cloudflare on a redirect destination is not attributed to the requested hostname', async () => {
+test('multiple Cloudflare headers on a non-Cloudflare address remain unconfirmed', async () => {
+  const r = await scanSite(domain,{fetcher:fixture({address:'185.107.91.213',page:()=>response(200,{
+    server:'cloudflare','cf-ray':'aabbccdd11223344-AMS','cf-cache-status':'DYNAMIC',
+  })}).fetcher});
+  assert.equal(r.summary.state,'reachable');
+  assert.equal(r.headers.server,'cloudflare', 'Preserve the raw observation without treating it as server identity');
+  assert.equal(r.cdn.state,'possible');
+  assert.equal(r.cdn.provider,null);
+  assert.equal(r.cdn.basis,'headers-only');
+  assert.deepEqual(r.cdn.dnsAddresses,[{hostname:domain,type:'A',address:'185.107.91.213',cloudflareRange:null}]);
+  assert.ok(r.cdn.evidence.some(e=>e.value==='server: cloudflare'));
+  assert.ok(r.cdn.evidence.some(e=>e.value==='cf-ray: aabbccdd11223344-AMS'));
+  assert.ok(r.cdn.evidence.some(e=>e.value==='cf-cache-status: DYNAMIC'));
+  assert.ok(r.cdn.evidence.every(e=>e.kind==='header'));
+});
+
+test('Cloudflare header signals on a redirect destination stay unconfirmed and scoped to that hostname', async () => {
   const r = await scanSite(domain,{fetcher:fixture({page:u=>u.hostname===domain
     ? response(302,{location:'https://elsewhere.example.net/'})
     : response(200,{server:'cloudflare','cf-ray':'aabbccdd11223344-AMS'})}).fetcher});
   assert.equal(r.cdn.state,'not_observed');
   assert.equal(r.cdn.otherHosts[0].hostname,'elsewhere.example.net');
-  assert.equal(r.cdn.otherHosts[0].state,'detected');
+  assert.equal(r.cdn.otherHosts[0].state,'possible');
   assert.equal(r.mapping.server,null);
+});
+
+test('network detection is scoped to the exact host, including IPv6 and redirects', async () => {
+  const www = 'www.'+domain;
+  const f = fixture({page:u=>u.hostname===domain
+    ? response(302,{location:'https://'+www+'/',server:'cloudflare','cf-ray':'aabbccdd11223344-AMS'})
+    : response(200)});
+  const r = await scanSite(domain,{fetcher:async (input,init)=>{
+    const u = new URL(input);
+    if(u.hostname==='cloudflare-dns.com' && u.searchParams.get('name')===www) {
+      return Response.json({Status:0,Answer:u.searchParams.get('type')==='AAAA'
+        ? [{name:www,type:28,data:'2606:4700::1111',TTL:300}]:[]});
+    }
+    return f.fetcher(input,init);
+  }});
+  assert.equal(r.cdn.state,'possible');
+  assert.equal(r.cdn.provider,null);
+  assert.ok(r.cdn.evidence.every(e=>e.kind==='header'));
+  assert.equal(r.cdn.otherHosts.length,1);
+  const destination = r.cdn.otherHosts[0];
+  assert.equal(destination.hostname,www);
+  assert.equal(destination.state,'detected');
+  assert.equal(destination.basis,'dns-network');
+  assert.equal(destination.dnsAddresses[0].cloudflareRange,'2606:4700::/32');
+  // Querying www for the overview must not attribute its network to the base host.
+  const noRedirect = detectCloudflare(domain,r.dns.queries,[{steps:[{url:'https://'+domain+'/',headers:{}}]}]);
+  assert.equal(noRedirect.state,'not_observed');
+  assert.equal(noRedirect.otherHosts.length,0);
 });
 
 test('manual registration is an exact, sourced match and remains available when public DNS fails', async () => {

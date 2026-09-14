@@ -102,12 +102,15 @@ function cdnPresentation(snapshot) {
   const cdn = snapshot.cdn;
   if (!cdn) return { label: 'Not checked', active: false };
   if (cdn.state === 'detected') return { label: 'Cloudflare detected', active: true, host: cdn.hostname,
-    description: 'Cloudflare proxy signals were found for ' + cdn.hostname + '. The public endpoint may conceal the hosting server.' };
-  if (cdn.state === 'possible') return { label: 'Cloudflare signal', active: true, host: cdn.hostname,
-    description: 'A Cloudflare response header was observed for ' + cdn.hostname + '. Proxy use is not yet confirmed.' };
+    description: 'A public DNS address for ' + cdn.hostname + ' matches a published Cloudflare proxy range. Origin hosting and WAF settings are not verified.' };
   const other = cdn.otherHosts?.find(host => host.state === 'detected');
   if (other) return { label: 'Cloudflare on redirect', active: true, host: other.hostname,
-    description: 'Cloudflare was detected on redirect host ' + other.hostname + '. This does not establish proxy use on ' + snapshot.domain + '.' };
+    description: 'A DNS address for redirect host ' + other.hostname + ' matches a published Cloudflare proxy range. This does not establish proxy use on ' + snapshot.domain + '.' };
+  if (cdn.state === 'possible') return { label: 'Cloudflare unconfirmed', active: false, uncertain: true, host: cdn.hostname,
+    description: 'Cloudflare-like headers were received for ' + cdn.hostname + ', without a matching Cloudflare DNS address. Headers can come from intermediaries on the probe request path; they do not establish that this site is protected by Cloudflare.' };
+  const possibleRedirect = cdn.otherHosts?.find(host => host.state === 'possible');
+  if (possibleRedirect) return { label: 'Redirect proxy unconfirmed', active: false, uncertain: true, host: possibleRedirect.hostname,
+    description: 'Cloudflare-like headers were received on redirect host ' + possibleRedirect.hostname + ', without a matching Cloudflare DNS address. Proxy use is unconfirmed.' };
   return { active: false, label: cdn.state === 'dns_observed' ? 'Cloudflare DNS' : cdn.state === 'not_observed' ? 'Not observed' : 'Could not verify',
     description: cdn.state === 'dns_observed' ? 'Cloudflare nameservers observed; web proxy use is unconfirmed.' : 'No Cloudflare proxy was established from the available evidence.' };
 }
@@ -116,16 +119,21 @@ function cdnEvidence(snapshot) {
   if (!c) return empty('No Cloudflare observation is available.');
   const p = cdnPresentation(snapshot);
   const signals = [...(c.evidence || []), ...(c.dnsEvidence || []), ...(c.otherHosts || []).flatMap(h => h.evidence)];
+  const addresses = [...(c.dnsAddresses || []), ...(c.otherHosts || []).flatMap(h => h.dnsAddresses || [])];
   return '<p class="cdn-evidence-intro">' + e(p.description) + '</p>' +
+    '<h3 class="detail-subheading">Public DNS addresses</h3>' +
+    (addresses.length ? table(['Hostname','Type','Address','Cloudflare range'], addresses.map(item =>
+      [item.hostname,item.type,item.address,item.cloudflareRange || 'No published range match'])) : empty('No DNS address evidence is available.')) +
+    '<h3 class="detail-subheading">Observed signals</h3>' +
     (signals.length ? table(['Evidence','Value','Observed at'], signals.map(item => [item.kind,item.value,item.source])) : empty('No matching signals were returned.')) +
     '<p class="cdn-evidence-note">' + e(c.detail) + ' Network list checked ' + e(c.networkListCheckedAt) + '.</p>';
 }
 function renderIdentity(snapshot) {
   const p = cdnPresentation(snapshot), m = snapshot.mapping || {};
   const mark = $('#cdnBadge');
-  mark.hidden = !p.active && snapshot.cdn?.state !== 'dns_observed';
-  mark.dataset.state = p.active ? 'proxy' : 'dns';
-  mark.innerHTML = icon(p.active ? 'shield' : 'network') + '<span>' + e(p.label) + '</span>';
+  mark.hidden = !p.active && !p.uncertain && snapshot.cdn?.state !== 'dns_observed';
+  mark.dataset.state = p.active ? 'proxy' : p.uncertain ? 'unconfirmed' : 'dns';
+  mark.innerHTML = icon(p.active ? 'shield' : p.uncertain ? 'info' : 'network') + '<span>' + e(p.label) + '</span>';
   $('#registeredServer').hidden = !m.server;
   $('#registeredServer').innerHTML = icon('server') + '<span>' + e(m.server + ' · ' + m.provider) + '</span>';
   $('#registeredServer').title = 'Manual registration · ' + (m.recordedAt || '') + '. Open the source details.';
@@ -218,8 +226,8 @@ function renderReport() {
     })).join('')+'</dl>'+footer('Base host: '+root,'Details','dns'));
 
   panel('environmentPanel','<div class="card-intro"><span>Exposed technology</span>'+badge('Reported headers')+'</div>'+
-    rows([['Web server',report.environment.server],['Powered by',report.environment.poweredBy],['Operating system','Not inspected','unknown'],['Database','Not inspected','unknown'],['CMS / platform','Not inspected','unknown']])+
-    footer('May describe a proxy or CDN.','Evidence','environment'));
+    rows([['Server header',report.environment.server],['Powered by',report.environment.poweredBy],['Operating system','Not inspected','unknown'],['Database','Not inspected','unknown'],['CMS / platform','Not inspected','unknown']])+
+    footer('Headers may describe an intermediary.','Evidence','environment'));
 
   const ns=query(root,'NS');
   panel('nameserverPanel','<div class="card-intro"><span>NS query: '+e(root)+'</span><span class="count-label">'+(ns?.records?.length||'—')+'</span></div>'+

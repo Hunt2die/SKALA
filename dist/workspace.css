@@ -132,7 +132,7 @@ html[data-theme="light"] .build-notice { color: #735117; background: #fff5de; bo
 .identity-badge span { overflow-wrap: anywhere; }
 .identity-badge:hover { filter: brightness(1.12); }
 .identity-badge:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
-.registration-badge, .identity-badge[data-state="dns"] { border-color: var(--line); background: var(--surface-raised); color: var(--cyan); }
+.registration-badge, .identity-badge[data-state="dns"], .identity-badge[data-state="unconfirmed"] { border-color: var(--line); background: var(--surface-raised); color: var(--cyan); }
 .cdn-notice { display: flex; align-items: center; gap: 15px; padding: 15px 18px; margin: -4px 0 20px; border: 1px solid #79502b; border-left: 3px solid #f5a052; border-radius: 10px; background: linear-gradient(110deg,#9a581519,transparent 70%),var(--surface); animation: cdn-arrive .38s ease-out both; }
 .cdn-shield { display: grid; place-items: center; flex: 0 0 43px; height: 43px; border-radius: 12px; background: #ef923220; color: #ffc081; }
 .cdn-shield .icon { width: 25px; height: 25px; }
