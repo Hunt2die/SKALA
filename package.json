@@ -1,10 +1,14 @@
 {
   "name": "skala",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test tests/diagnostics.test.mjs tests/handler.test.mjs tests/interface.test.mjs tests/pwa.test.mjs"
+    "test": "node --test tests/diagnostics.test.mjs tests/handler.test.mjs tests/interface.test.mjs tests/pwa.test.mjs && npm run test:worker",
+    "test:worker": "workerd test -I node_modules tests/worker-runtime.capnp"
+  },
+  "devDependencies": {
+    "workerd": "1.20260914.1"
   }
 }

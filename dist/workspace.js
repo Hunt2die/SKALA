@@ -85,7 +85,7 @@ function renderDetailPages(snapshot, state = 'idle') {
     pageNote('Resolver: '+r.dns.resolver+'. Records reflect this scan; a resolver error does not establish a missing record.')+
     '<div class="detail-grid">'+
     detailCard('All observed records','database',r.dns.records.length?table(['Type','Name','Value','TTL (s)'],r.dns.records.map(a=>[a.type,a.name,a.value,a.ttl])):empty('No records were returned. Inspect the query outcomes below.'),true)+
-    detailCard('Query outcomes','network',table(['Type','Queried name','Outcome','Evidence'],r.dns.queries.map(q=>[q.type,q.name,queryState(q),q.error||(q.records.length+' matching records')])) ,true)+'</div>';
+    detailCard('Query outcomes','network',table(['Type','Queried name','Outcome','Evidence','Error code'],r.dns.queries.map(q=>[q.type,q.name,queryState(q),q.error||(q.records.length+' matching records'),q.errorCode || '—'])) ,true)+'</div>';
 
   const traceCard = (key,title) => {
     const trace = r[key];

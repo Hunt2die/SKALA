@@ -83,11 +83,21 @@ function readHeaders(headers) {
   return Object.fromEntries(entries);
 }
 
-function failure(error) {
-  return {
-    code: error instanceof ProbeError ? error.code : 'fetch_failed',
-    message: error instanceof ProbeError ? error.message : 'The probe could not complete this request. The site may block automated or cloud-hosted requests.',
-  };
+function failure(error, stage = 'http') {
+  if (error instanceof ProbeError) return { code: error.code, message: error.message };
+  // Classify runtime failures without exposing exception text, URLs or response bodies.
+  if (/illegal invocation|incorrect this reference/i.test(error?.message || '')) {
+    return { code: 'runtime_invocation', message: 'SKALA could not call the Worker fetch API. Update the deployed Worker.' };
+  }
+  if (/unsupported cache|cache.*not implemented/i.test(error?.message || '')) {
+    return { code: 'runtime_cache_mode', message: 'The Worker runtime rejected the request cache option. Check its compatibility date.' };
+  }
+  if (/invalid redirect value/i.test(error?.message || '')) {
+    return { code: 'runtime_redirect_mode', message: 'SKALA used a redirect option unsupported by the Worker runtime. Update the deployed Worker.' };
+  }
+  return { code: stage === 'dns' ? 'resolver_network' : 'fetch_failed', message: stage === 'dns'
+    ? 'SKALA could not contact the DNS resolver. Website availability has not been established.'
+    : 'The website request failed before response headers arrived. Network, TLS or access restrictions may be involved.' };
 }
 
 export function summarize(https, http) {
@@ -131,12 +141,21 @@ export async function scanSite(input, options = {}) {
       try {
         const url = DNS_ENDPOINT + '?name=' + encodeURIComponent(name) + '&type=' + type;
         const data = await timedRequest(fetcher, url, {
-          headers: { accept: 'application/dns-json' }, redirect: 'error', cache: 'no-store',
+          // Workers supports follow/manual; reject redirects ourselves without following them.
+          headers: { accept: 'application/dns-json' }, redirect: 'manual', cache: 'no-store',
         }, deadline, dnsTimeout, async response => {
-          if (!response.ok) throw new ProbeError('resolver_error', 'The DNS resolver returned HTTP ' + response.status + '.');
-          return JSON.parse(await limitedText(response));
+          if (!response.ok) {
+            void response.body?.cancel().catch(() => {});
+            if (response.status >= 300 && response.status < 400) {
+              throw new ProbeError('resolver_redirect', 'The DNS resolver returned a redirect (HTTP ' + response.status + '), which was not followed.');
+            }
+            throw new ProbeError('resolver_error', 'The DNS resolver returned HTTP ' + response.status + '.');
+          }
+          const text = await limitedText(response);
+          try { return JSON.parse(text); }
+          catch { throw new ProbeError('resolver_format', 'The DNS resolver returned an invalid JSON response.'); }
         });
-        if (!Number.isInteger(data.Status) || data.TC) throw new ProbeError('resolver_error', 'The resolver returned an incomplete DNS response.');
+        if (!data || !Number.isInteger(data.Status) || data.TC) throw new ProbeError('resolver_error', 'The resolver returned an incomplete DNS response.');
         const answers = (Array.isArray(data.Answer) ? data.Answer : []).slice(0, 64)
           .filter(r => typeof r.name === 'string' && typeof r.data === 'string' && Number.isInteger(r.type))
           .map(r => ({ name: r.name.replace(/\.$/, ''), type: TYPE_NAMES[r.type] || String(r.type),
@@ -144,9 +163,11 @@ export async function scanSite(input, options = {}) {
         const records = answers.filter(r => r.type === type);
         const state = data.Status === 3 ? 'nxdomain' : data.Status !== 0 ? 'error' : records.length ? 'ok' : 'no_data';
         return { name, type, state, status: data.Status, answers, records,
+          errorCode: state === 'error' ? 'dns_rcode' : null,
           error: state === 'error' ? 'DNS response code ' + data.Status : null };
       } catch (error) {
-        return { name, type, state: 'error', status: null, answers: [], records: [], error: failure(error).message };
+        const problem = failure(error, 'dns');
+        return { name, type, state: 'error', status: null, answers: [], records: [], errorCode: problem.code, error: problem.message };
       }
     })();
     dnsCache.set(key, promise);
@@ -159,7 +180,8 @@ export async function scanSite(input, options = {}) {
     const promise = (async () => {
       if (!validPublicHostname(host) || excluded.has(host)) throw new ProbeError('blocked_target', 'The redirect target is not an eligible public website.');
       const results = await Promise.all([queryDNS(host, 'A'), queryDNS(host, 'AAAA')]);
-      if (results.some(r => r.state === 'error')) throw new ProbeError('dns_error', 'Public address resolution could not be verified.');
+      const failed = results.find(r => r.state === 'error');
+      if (failed) throw new ProbeError('dns_error', 'Public DNS verification failed: ' + failed.error + ' [' + failed.errorCode + ']');
       const addresses = results.flatMap(r => r.answers.filter(a => ['A', 'AAAA'].includes(a.type)).map(a => a.value));
       if (!addresses.length) throw new ProbeError('dns_no_address', 'No public A or AAAA address was found by this resolver.');
       if (addresses.some(a => !isPublicIP(a))) throw new ProbeError('blocked_target', 'The hostname resolves to a private or reserved address. The HTTP probe was stopped.');
@@ -253,8 +275,11 @@ export async function scanSite(input, options = {}) {
   const dmarc = queries.find(q => q.name === '_dmarc.' + root);
   if (dmarc && ['no_data', 'nxdomain'].includes(dmarc.state)) findings.push({ id: 'dmarc', severity: 'info', title: 'No DMARC record at checked name',
     detail: 'No TXT record was returned for ' + dmarc.name + '. Parent-domain policy inheritance has not been evaluated.', section: 'dns' });
-  if (queries.some(q => q.state === 'error')) findings.push({ id: 'dns_partial', severity: 'review', title: 'Some DNS checks were inconclusive',
-    detail: 'Resolver failures are shown as unknown, rather than as missing records.', section: 'dns' });
+  const failedQueries = queries.filter(q => q.state === 'error');
+  if (failedQueries.length) findings.push({ id: 'dns_partial', severity: 'review',
+    title: failedQueries.length === queries.length ? 'All DNS checks failed' : 'Some DNS checks were inconclusive',
+    detail: failedQueries.length + '/' + queries.length + ' queries failed. ' + failedQueries[0].error +
+      ' [' + failedQueries[0].errorCode + '] Open DNS evidence for each query.', section: 'dns' });
   return {
     schemaVersion: 1, mode: 'live', domain: target.hostname, scope: 'homepage', startedAt, checkedAt: new Date().toISOString(),
     vantage: 'SKALA server-side probe', summary, entrypoints, target,

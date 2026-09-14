@@ -144,6 +144,9 @@ test('scan observations distinguish resolver failure and clear stale data after 
   assert.equal(h.get('#probeDns').textContent,'DNS: 0/9 replies');
   assert.equal(h.get('#probeHttps').textContent,'HTTPS: Not attempted');
   assert.equal(h.get('#statusCard').dataset.state,'unverified');
+  assert.match(h.get('#scanFeedback').textContent,/HTTP\/HTTPS checks were not started\..*503/);
+  assert.match(h.get('#view-dns').innerHTML,/resolver_error/);
+  assert.equal(h.get('#toast').textContent,'DNS failed · website status not checked');
   await h.run('runScan("beta.example.com")');
   assert.equal(h.get('#probeBackend').dataset.state,'review');
   assert.equal(h.get('#probeDns').textContent,'DNS: No result');

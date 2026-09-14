@@ -100,6 +100,23 @@ test('DNS failure is unknown, not a missing AAAA or DMARC record', async () => {
   assert.equal(report.summary.state, 'unverified');
   assert.ok(!report.findings.some(f => ['ipv6', 'dmarc'].includes(f.id)));
   assert.ok(report.findings.some(f => f.id === 'dns_partial'));
+  assert.equal(report.dns.queries[0].errorCode, 'resolver_error');
+  assert.match(report.summary.detail, /Public DNS verification failed:.*DNS resolver returned HTTP 503/);
+});
+test('DNS failures distinguish runtime options, connectivity and malformed resolver responses', async () => {
+  for (const [fetcher, code] of [
+    [() => { throw new TypeError('Invalid redirect value, must be one of follow or manual'); }, 'runtime_redirect_mode'],
+    [() => { throw new TypeError('network failure with https://private.example.com/?secret=hidden'); }, 'resolver_network'],
+    [() => new Response('<html>upstream error</html>'), 'resolver_format'],
+    [() => Response.json(null), 'resolver_error'],
+  ]) {
+    const report = await scanSite(domain, { fetcher });
+    assert.ok(report.dns.queries.every(q => q.errorCode === code), code);
+    assert.equal(report.summary.state, 'unverified');
+    assert.ok(!JSON.stringify(report).includes('secret=hidden'));
+    assert.ok(!JSON.stringify(report).includes('<html>'));
+    assert.match(report.findings.find(f => f.id === 'dns_partial').title, /All DNS checks failed/);
+  }
 });
 test('DNS timeout completes with an inconclusive report', async () => {
   const f = fixture({ dnsDelay: true });
