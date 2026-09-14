@@ -6,5 +6,5 @@
   "workers_dev": true,
   "preview_urls": false,
   "build": { "command": "npm run build" },
-  "vars": { "SKALA_ALLOWED_EMAILS": "" }
+  "vars": { "SKALA_ALLOWED_EMAILS": "twan1304@gmail.com" }
 }
