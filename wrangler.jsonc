@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "skala",
+  "main": "dist/server/cloudflare-entry.js",
+  "compatibility_date": "2026-09-14",
+  "workers_dev": true,
+  "preview_urls": false,
+  "build": { "command": "npm run build" },
+  "vars": { "SKALA_ALLOWED_EMAILS": "" }
+}

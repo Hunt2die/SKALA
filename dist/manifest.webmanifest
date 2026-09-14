@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "SKALA",
+  "short_name": "SKALA",
+  "description": "Server Knowledge & Location Assistant. Domain diagnostics and internal server registrations.",
+  "lang": "en",
+  "start_url": "/#overview",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07121c",
+  "theme_color": "#07121c",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/icon-192.png?v=__SKALA_REVISION__", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png?v=__SKALA_REVISION__", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png?v=__SKALA_REVISION__", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

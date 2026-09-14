@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07121c">
+  <script id="buildMetadata" type="application/json">{"version":"development","revision":"unbuilt","id":"development"}</script>
+  <script id="themeBoot">try{document.documentElement.dataset.theme=localStorage.getItem('skala.theme')==='light'?'light':'dark';}catch{}</script>
+  <meta name="description" content="SKALA — live public website status, DNS, redirects and response headers.">
+  <title>SKALA — Live diagnostics</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png" sizes="180x180">
+  <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+  <meta name="apple-mobile-web-app-title" content="SKALA">
+  <link rel="stylesheet" href="styles.css?v=__SKALA_REVISION__">
+  <link rel="stylesheet" href="dark.css?v=__SKALA_REVISION__">
+  <link rel="stylesheet" href="workspace.css?v=__SKALA_REVISION__">
+  <link rel="stylesheet" href="light.css?v=__SKALA_REVISION__">
+  <script src="target.js?v=__SKALA_REVISION__" defer></script>
+  <script src="registration.js?v=__SKALA_REVISION__" defer></script>
+  <script src="app.js?v=__SKALA_REVISION__" defer></script>
+  <script src="workspace.js?v=__SKALA_REVISION__" defer></script>
+  <script src="pwa.js?v=__SKALA_REVISION__" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Skip to diagnostics</a>
+  <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5.1 7.5a8 8 0 0 1 13.2-1.2L20 9M4 15l1.7 2.7a8 8 0 0 0 13.2-1.2"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></symbol>
+<symbol id="i-network" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M5 16v-4h14v4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5"/></symbol>
+<symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 4 18 4 18 0V5M3 12c0 4 18 4 18 0"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-5 9-8 11-3-2-8-6-8-11V5l8-3Z"/><path d="m8 11 3 3 5-6"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+<symbol id="i-route" viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 5h9a4 4 0 0 1 0 8H8a3 3 0 0 0 0 6h9"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="m7 6-6 6 6 6m10-12 6 6-6 6m-3-15-4 18"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-8l1-7Z"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3h7v7m0-7L10 14M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></symbol><symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol></defs></svg>
+
+  <header class="masthead">
+    <div class="masthead-photo" aria-hidden="true"><img class="masthead-image" src="server-header.jpg" width="1020" height="360" alt="" fetchpriority="high" decoding="async"></div>
+    <div class="masthead-inner">
+    <div class="brand-panel"><a href="#overview" class="brand" aria-label="SKALA diagnostics"><span class="brand-mark"><svg class="icon " aria-hidden="true"><use href="#i-server"/></svg><span class="brand-orbit"></span></span><span class="brand-copy"><span class="brand-name">SKALA<span class="brand-stop">.</span></span><span class="brand-description">Server Knowledge<br><span>&amp; Location Assistant</span></span></span></a></div>
+    <div class="masthead-right"><span class="workspace-label">INFRASTRUCTURE<br><strong>ANSWERS CLOSER</strong></span><button class="preview-chip" data-detail="about" aria-label="About SKALA diagnostics"><span></span><span id="serviceLabel">Basic diagnostics</span><svg class="icon " aria-hidden="true"><use href="#i-info"/></svg></button><button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to light mode" title="Switch to light mode"><svg class="icon" aria-hidden="true"><use href="#i-sun"/></svg><span>Light mode</span></button><div class="avatar" aria-label="Internal IT workspace">IT</div></div>
+  </div></header>
+  <main id="workspace" tabindex="-1">
+    <div class="page-heading"><div><nav class="breadcrumbs" aria-label="Breadcrumb"><span>Workspace</span><svg class="icon " aria-hidden="true"><use href="#i-chevron"/></svg><span id="viewBreadcrumb" aria-current="page">Overview</span></nav><h1 id="pageTitle">Domain overview</h1></div><div class="page-actions"><button id="installApp" type="button" class="button button-secondary" hidden><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Install SKALA</button><button class="button button-secondary" data-action="export" disabled><svg class="icon " aria-hidden="true"><use href="#i-download"/></svg>Export report</button></div></div>
+    <p id="connectivityNotice" class="connectivity-notice" role="status" hidden>You’re offline. Reconnect to run a live check. Any result already open is an earlier snapshot.</p>
+    <form id="scanForm" class="scan-form" novalidate>
+      <div class="scan-field"><svg class="icon " aria-hidden="true"><use href="#i-search"/></svg><label for="domainInput" class="sr-only">Public domain or URL</label><input id="domainInput" name="domain" type="text" value="kinglaminaat.nl" placeholder="Enter a public domain or URL…" inputmode="url" autocapitalize="none" autocomplete="off" spellcheck="false" aria-describedby="scanTarget scanNote scanFeedback" required><span class="input-hint">DOMAIN / URL</span></div>
+      <button id="scanButton" class="button button-primary" type="submit"><svg class="icon scan-icon" aria-hidden="true"><use href="#i-search"/></svg><span>Run scan</span><svg class="icon arrow-icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+    </form>
+    <p id="scanTarget" class="scan-target" aria-live="polite">Homepage targets: https://kinglaminaat.nl/ and http://kinglaminaat.nl/</p>
+    <div id="registrationHint" class="registration-hint"></div>
+    <div class="probe-health" aria-label="Current probe observations" aria-live="polite"><span id="probeBackend" data-state="idle">Backend: Checking…</span><span id="probeDns" data-state="idle">DNS: Not checked</span><span id="probeHttps" data-state="idle">HTTPS: Not checked</span><span id="probeHttp" data-state="idle">HTTP: Not checked</span><span id="probeContext">No scan yet</span></div>
+    <p id="buildNotice" class="build-notice" role="status" hidden></p>
+    <div class="scan-footnote"><p id="scanNote"><span class="sample-label">LIVE CHECK</span>Homepage status · DNS · redirects · response headers</p><span class="scan-scope">One check at a time</span></div>
+    <p id="scanFeedback" class="scan-feedback" role="status" aria-live="polite" hidden></p>
+    <section class="domain-overview" aria-labelledby="domainTitle">
+      <div class="domain-identity"><div class="domain-icon"><svg class="icon " aria-hidden="true"><use href="#i-globe"/></svg></div><div><div class="domain-name-line"><h2 id="domainTitle">Ready to inspect</h2><span id="snapshotBadge" class="badge badge-outline">No scan yet</span></div><div class="identity-badges"><button id="cdnBadge" class="identity-badge" type="button" data-detail="cdn" hidden></button><button id="registeredServer" class="identity-badge registration-badge" type="button" data-detail="mapping" hidden></button></div><div class="snapshot-meta"><svg class="icon " aria-hidden="true"><use href="#i-clock"/></svg><span id="updatedAt">Run a check to get a current snapshot.</span></div></div></div>
+      <div class="overview-stats"><div class="overview-stat"><span>HTTP response</span><strong id="httpStat">—</strong></div><div class="overview-stat"><span>Time to headers</span><strong id="timingStat">—<span class="unit">ms</span></strong></div><button class="overview-stat findings-shortcut" data-action="findings"><span>Findings</span><strong id="findingStat">—<svg class="icon " aria-hidden="true"><use href="#i-arrow"/></svg></strong></button><button class="icon-button" id="refreshButton" title="Check the current domain again" aria-label="Check the current domain again"><svg class="icon " aria-hidden="true"><use href="#i-refresh"/></svg></button></div>
+      <div class="scan-progress" aria-hidden="true"><span></span></div>
+    </section>
+    <div id="cdnNotice" class="cdn-notice" role="status" aria-live="polite" hidden></div>
+    <div class="view-navigation"><div class="view-tabs" role="tablist" aria-label="Diagnostics pages">
+      <button id="tab-overview" type="button" role="tab" aria-selected="true" aria-controls="view-overview" data-view="overview"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>Overview</button>
+      <button id="tab-infrastructure" type="button" role="tab" aria-selected="false" aria-controls="view-infrastructure" tabindex="-1" data-view="infrastructure"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg>Infrastructure</button>
+      <button id="tab-dns" type="button" role="tab" aria-selected="false" aria-controls="view-dns" tabindex="-1" data-view="dns"><svg class="icon" aria-hidden="true"><use href="#i-database"/></svg>DNS</button>
+      <button id="tab-http" type="button" role="tab" aria-selected="false" aria-controls="view-http" tabindex="-1" data-view="http"><svg class="icon" aria-hidden="true"><use href="#i-route"/></svg>HTTP &amp; redirects</button>
+      <button id="tab-findings" type="button" role="tab" aria-selected="false" aria-controls="view-findings" tabindex="-1" data-view="findings"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>Findings<span class="tab-count" id="findingsTabCount" hidden></span></button>
+    </div></div>
+    <div class="workspace-grid view-panel" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+      <section class="evidence-grid" aria-label="Infrastructure evidence">
+        <article class="panel" id="serverPanel"><header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-server"/></svg></span><h2>Server mapping</h2><span class="section-index">01</span></header><div class="panel-content"><p class="empty-copy">Scan to combine public IPs and Cloudflare signals with any recorded internal registration.</p></div></article>
+        <article class="panel" id="ipPanel"><header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-network"/></svg></span><h2>Resolved IPs</h2><span class="section-index">02</span></header><div class="panel-content"><p class="empty-copy">A and AAAA results for the requested host and www.</p></div></article>
+        <article class="panel" id="environmentPanel"><header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-layers"/></svg></span><h2>Environment</h2><span class="section-index">03</span></header><div class="panel-content"><p class="empty-copy">Reported technology from the final response headers.</p></div></article>
+        <article class="panel" id="nameserverPanel"><header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-server"/></svg></span><h2>Nameservers</h2><span class="section-index">04</span></header><div class="panel-content"><p class="empty-copy">Nameservers returned by the public DNS resolver.</p></div></article>
+        <article class="panel" id="dnsPanel"><header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-database"/></svg></span><h2>DNS records</h2><span class="section-index">05</span></header><div class="panel-content"><p class="empty-copy">A, AAAA, CNAME, MX, TXT and NS records.</p></div></article>
+        <article class="panel" id="certificatePanel"><header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-shield"/></svg></span><h2>HTTPS / SSL</h2><span class="section-index">06</span></header><div class="panel-content"><p class="empty-copy">Check HTTPS response availability. Certificate dates need a deeper probe.</p></div></article>
+        <article class="panel full-width redirect-panel" id="redirectPanel" tabindex="-1">
+          <header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-route"/></svg></span><h2>Redirect chain</h2><span class="header-caption" id="redirectCount">Not checked</span><div class="trace-tabs" role="tablist" aria-label="Entry point"><button id="httpsTab" role="tab" aria-selected="true" aria-controls="traceResults" data-trace="https">HTTPS</button><button id="httpTab" role="tab" aria-selected="false" aria-controls="traceResults" tabindex="-1" data-trace="http">HTTP entry</button></div></header>
+          <div id="traceResults" role="tabpanel" aria-labelledby="httpsTab" tabindex="0"><p class="empty-copy">Both HTTP and HTTPS entry points will be checked.</p></div>
+        </article>
+        <article class="terminal full-width" id="headersPanel">
+          <header class="terminal-heading"><div><svg class="icon " aria-hidden="true"><use href="#i-code"/></svg><h2>Response headers</h2><span class="terminal-badge">GET</span></div><button class="terminal-copy" id="copyHeaders" disabled><svg class="icon " aria-hidden="true"><use href="#i-copy"/></svg>Copy</button></header>
+          <div class="terminal-request"><span>GET</span><code id="headersURL">No response yet</code><span class="terminal-status" id="headersStatus">—</span></div>
+          <pre id="headerCode" tabindex="0" aria-label="Observed HTTP response headers"><code>Run a check to inspect the returned headers.</code></pre>
+        </article>
+      </section>
+      <aside class="insights-rail" aria-label="Status and actions">
+        <section class="status-card" id="statusCard" data-state="idle"><span class="status-icon" id="statusIcon"><svg class="icon " aria-hidden="true"><use href="#i-globe"/></svg></span><div class="status-copy"><span class="eyebrow">SITE STATUS</span><h2 id="statusTitle">Awaiting scan</h2><p id="statusDetail">No live result yet.</p></div><span class="status-beacon" aria-hidden="true"></span></section>
+        <section class="findings-panel" id="findingsPanel" tabindex="-1" aria-labelledby="findingsTitle">
+          <header class="findings-heading"><div><svg class="icon " aria-hidden="true"><use href="#i-search"/></svg><h2 id="findingsTitle">Findings</h2></div><span class="findings-count" id="findingsCount">—</span></header>
+          <p class="findings-summary" id="findingsSummary">Waiting for evidence</p>
+          <div id="findingsList"><div class="finding"><p>Run a scan to see observations from the current response and DNS results.</p></div></div>
+          <div class="findings-bottom"><svg class="icon " aria-hidden="true"><use href="#i-info"/></svg>Point-in-time checks from the SKALA probe</div>
+        </section>
+        <section class="panel quick-panel"><header class="panel-heading"><span class="panel-icon"><svg class="icon " aria-hidden="true"><use href="#i-bolt"/></svg></span><h2>Quick actions</h2></header><div class="quick-actions">
+          <button data-go-view="dns"><svg class="icon " aria-hidden="true"><use href="#i-search"/></svg>Inspect DNS records<svg class="icon " aria-hidden="true"><use href="#i-chevron"/></svg></button>
+          <button data-action="trace"><svg class="icon " aria-hidden="true"><use href="#i-route"/></svg>Inspect redirect chain<svg class="icon " aria-hidden="true"><use href="#i-chevron"/></svg></button>
+          <button data-go-view="http"><svg class="icon " aria-hidden="true"><use href="#i-shield"/></svg>Inspect HTTPS result<svg class="icon " aria-hidden="true"><use href="#i-chevron"/></svg></button>
+          <button data-action="refresh"><svg class="icon " aria-hidden="true"><use href="#i-refresh"/></svg>Check domain again<svg class="icon " aria-hidden="true"><use href="#i-chevron"/></svg></button>
+          <button data-action="export" disabled><svg class="icon " aria-hidden="true"><use href="#i-download"/></svg>Export current report<svg class="icon " aria-hidden="true"><use href="#i-chevron"/></svg></button>
+        </div></section>
+      </aside>
+    </div>
+    <section class="view-panel detail-page" id="view-infrastructure" role="tabpanel" aria-labelledby="tab-infrastructure" tabindex="0" hidden></section>
+    <section class="view-panel detail-page" id="view-dns" role="tabpanel" aria-labelledby="tab-dns" tabindex="0" hidden></section>
+    <section class="view-panel detail-page" id="view-http" role="tabpanel" aria-labelledby="tab-http" tabindex="0" hidden></section>
+    <section class="view-panel detail-page" id="view-findings" role="tabpanel" aria-labelledby="tab-findings" tabindex="0" hidden></section>
+    <footer class="footer"><div><strong>SKALA<span>.</span></strong><span>Infrastructure, in focus.</span></div><div><span class="backend-status" id="backendStatus">Checking service…</span><span class="version" id="buildId">__SKALA_BUILD_LABEL__</span></div></footer>
+  </main>
+  <dialog id="detailDialog" aria-labelledby="detailTitle" aria-describedby="detailContext"><div class="dialog-header"><div><span class="eyebrow">SKALA / INSPECTOR</span><h2 id="detailTitle"></h2></div><button class="icon-button" id="closeDialog" aria-label="Close inspector"><svg class="icon " aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="dialog-body"><p id="detailContext" class="detail-context"></p><div id="detailContent"></div></div><div class="dialog-footer"><svg class="icon " aria-hidden="true"><use href="#i-info"/></svg>Public, read-only probes. No server settings are changed.</div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

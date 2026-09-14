@@ -1,0 +1,10 @@
+{
+  "name": "skala",
+  "version": "0.5.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/diagnostics.test.mjs tests/handler.test.mjs tests/interface.test.mjs tests/pwa.test.mjs"
+  }
+}
