@@ -16,6 +16,7 @@ test('serves the interface and announces only implemented capabilities', async (
   assert.equal(await (await handle(new Request(origin))).text(), '<h1>SKALA</h1>');
   const health = await (await handle(new Request(origin + '/api/health'))).json();
   assert.equal(health.mode, 'live');
+  assert.ok(health.capabilities.includes('reverse-dns'));
   assert.ok(!health.capabilities.includes('certificate-expiry'));
   assert.equal(health.backend, 'available');
   assert.equal(health.outbound, 'not_checked');

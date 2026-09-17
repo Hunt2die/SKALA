@@ -56,7 +56,7 @@ function renderDetailPages(snapshot, state = 'idle') {
     const waiting = state==='loading'?'Waiting for the current scan.':'Run a scan to populate these observations.';
     const unscanned = (title,symbol,columns) => detailCard(title,symbol,table(columns,[])+empty(waiting));
     const layouts = {
-      infrastructure: unscanned('Public endpoints','network',['Host','Type','Address','TTL (s)'])+unscanned('Reported technology','layers',['Evidence','Value'])+detailCard('Server mapping','server',empty('Any recorded server registration appears beside the domain input. Scan to see it alongside the public endpoint.')+pageNote('Public DNS does not reliably identify the origin behind a CDN.'),true),
+      infrastructure: unscanned('Public endpoints','network',['Host','Type','Address','TTL (s)'])+unscanned('Reverse DNS (PTR)','server',['IP address','PTR hostname','Outcome'])+unscanned('Reported technology','layers',['Evidence','Value'])+detailCard('Server mapping','server',empty('Any recorded server registration appears beside the domain input. Scan to see it alongside the public endpoint.')+pageNote('Public DNS does not reliably identify the origin behind a CDN.'),true),
       dns: unscanned('Observed records','database',['Type','Name','Value','TTL (s)'])+unscanned('Query outcomes','network',['Query','Outcome'])+detailCard('Names checked','network',pageNote('A / AAAA for the base host and www; NS, MX, TXT and CNAME for the base host; TXT for its DMARC name.'),true),
       http: unscanned('HTTPS entry path','route',['Step','HTTP','Response URL','Time (ms)'])+unscanned('HTTP entry path','route',['Step','HTTP','Response URL','Time (ms)'])+unscanned('Response headers','code',['Header','Value'])+detailCard('HTTPS / SSL evidence','shield',table(['Observation','State'],[['HTTPS response','Awaiting scan'],['Certificate issuer / expiry','Not inspected'],['Origin TLS','Not inspected']])),
       findings: '',
@@ -76,16 +76,18 @@ function renderDetailPages(snapshot, state = 'idle') {
   $('#view-infrastructure').innerHTML = metrics([['Public addresses observed',uniqueIPs.size],['CDN / proxy',cdnPresentation(r).label],['Registered server',r.mapping?.server ? r.mapping.server+' · '+r.mapping.provider : 'Not registered']])+
     '<div class="detail-grid">'+
     detailCard('Public endpoints','network',addresses.length?table(['Host','Type','Address','TTL (s)'],addresses.map(a=>[a.name,a.type,a.value,a.ttl])):empty('No public addresses were verified. The DNS page shows each query outcome.'),true)+
+    detailCard('Reverse DNS (PTR)','server',reverseEvidence(r),true)+
     detailCard('Reported technology','layers',table(['Evidence','Value'],environment.map(([k,v])=>[k,v||'Not observed']))+pageNote('A proxy or CDN may supply these headers. OS, database and CMS are not inspected.'))+
     detailCard('Server registration','server',table(['Mapping','Value'],mappingRows(r))+pageNote('Owner-supplied registration. No hosting panel was contacted; update this record after a migration.'))+
     detailCard('CDN & origin','shield',cdnEvidence(r),true)+'</div>';
 
   const failures = r.dns.queries.filter(q=>q.state==='error').length;
-  $('#view-dns').innerHTML = metrics([['Queries completed',r.dns.queries.length-failures+' / '+r.dns.queries.length],['Records observed',r.dns.records.length],['Inconclusive queries',failures]])+
+  $('#view-dns').innerHTML = metrics([['Forward DNS replies',r.dns.queries.length-failures+' / '+r.dns.queries.length],['Records observed',r.dns.records.length],['Inconclusive forward queries',failures]])+
     pageNote('Resolver: '+r.dns.resolver+'. Records reflect this scan; a resolver error does not establish a missing record.')+
     '<div class="detail-grid">'+
     detailCard('All observed records','database',r.dns.records.length?table(['Type','Name','Value','TTL (s)'],r.dns.records.map(a=>[a.type,a.name,a.value,a.ttl])):empty('No records were returned. Inspect the query outcomes below.'),true)+
-    detailCard('Query outcomes','network',table(['Type','Queried name','Outcome','Evidence','Error code'],r.dns.queries.map(q=>[q.type,q.name,queryState(q),q.error||(q.records.length+' matching records'),q.errorCode || '—'])) ,true)+'</div>';
+    detailCard('Query outcomes','network',table(['Type','Queried name','Outcome','Evidence','Error code'],r.dns.queries.map(q=>[q.type,q.name,queryState(q),q.error||(q.records.length+' matching records'),q.errorCode || '—'])) ,true)+
+    detailCard('Reverse DNS (PTR)','server',reverseEvidence(r,true),true)+'</div>';
 
   const traceCard = (key,title) => {
     const trace = r[key];

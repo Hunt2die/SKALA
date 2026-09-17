@@ -48,3 +48,21 @@ export const headerOnlyCloudflare = { async test() {
   check(report.cdn.dnsAddresses[0].address === '185.107.91.213' && report.cdn.dnsAddresses[0].cloudflareRange === null,
     'Include the contradictory network evidence');
 }};
+
+export const reverseResolution = { async test() {
+  const report = await scanSite('alpha.example.com');
+  const entries = report.reverseDNS.entries;
+  check(entries.length === 2, 'Deduplicate public addresses shared by base and www');
+  check(entries.every(entry => entry.query.state === 'ok' && entry.query.type === 'PTR'), 'Native Worker PTR requests must succeed');
+  check(entries[0].hostnames[0] === 's09.fixture.example.net' && entries[1].hostnames[0] === 'ipv6.fixture.example.net',
+    'Resolve both address families into their PTR hostnames');
+  check(entries[0].sources.length === 2 && entries[0].query.records[0].ttl === 600, 'Keep attribution and TTL');
+  check(report.mapping.server === null, 'PTR records must not assign an internal server');
+}};
+
+export const reverseFailure = { async test() {
+  const report = await scanSite('reverse-failure.example.com');
+  check(report.reverseDNS.entries[0].query.errorCode === 'resolver_error', 'Keep reverse DNS failure evidence');
+  check(report.reverseDNS.entries[0].hostnames.length === 0, 'Do not fabricate a PTR hostname after a failed query');
+  check(report.summary.state === 'reachable' && report.summary.status === 200, 'A failed PTR query must not change HTTP health');
+}};

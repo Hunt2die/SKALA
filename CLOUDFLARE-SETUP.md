@@ -1,8 +1,8 @@
-# SKALA 0.5.3 — GitHub → Cloudflare testing setup
+# SKALA 0.5.4 — GitHub → Cloudflare testing setup
 
 This package contains the dashboard, live DNS/HTTP probe, PWA installation support and SKALA icons. It is ready to deploy; it has not been published to your Cloudflare account.
 
-For an existing 0.5.2 installation, follow [UPGRADE-0.5.3.md](UPGRADE-0.5.3.md); keep your configured `wrangler.jsonc` and Access policy. Older installations should first apply [UPGRADE-0.5.2.md](UPGRADE-0.5.2.md).
+For an existing 0.5.3 installation, follow [UPGRADE-0.5.4.md](UPGRADE-0.5.4.md); keep your configured `wrangler.jsonc` and Access policy. Older installations should first apply [UPGRADE-0.5.2.md](UPGRADE-0.5.2.md) and [UPGRADE-0.5.3.md](UPGRADE-0.5.3.md) as needed.
 
 ## Deploy from GitHub
 
@@ -64,6 +64,6 @@ For the first hosted check: scan `kinglaminaat.nl`, confirm the result timestamp
 
 For later code changes, run the deploy command again. Keep the email allowlist in your local configuration so later deployments preserve it.
 
-The Node and native Worker-runtime suites use simulated outbound responses and authentication. The 0.5.2 patch fixes an unsupported DNS redirect option that previously stopped every DNS request in the Worker runtime. Version 0.5.3 removes overconfident header-only Cloudflare detection and retains the raw evidence. The request upload has a five-second deadline; expired and cancelled uploads release their scan slot. A local build does not deploy the patch to your Cloudflare account; verify the version and run a new hosted scan after updating.
+The Node and native Worker-runtime suites use simulated outbound responses and authentication. The 0.5.2 patch fixes an unsupported DNS redirect option that previously stopped every DNS request in the Worker runtime. Version 0.5.3 removes overconfident header-only Cloudflare detection and retains the raw evidence. Version 0.5.4 adds bounded IPv4/IPv6 reverse DNS lookups. The request upload has a five-second deadline; expired and cancelled uploads release their scan slot. A local build does not deploy the patch to your Cloudflare account; verify the version and run a new hosted scan after updating.
 
 Internal mapping currently includes the manual `kinglaminaat.nl → S01 · Interfile` record; hosting-panel sync is not connected. SKALA's role ends at diagnosis and identifying the server. You sign in on the real server and obtain any DB SSO link through DirectAdmin there. SKALA does not handle your work credentials, database access or SSO links.

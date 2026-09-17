@@ -47,7 +47,7 @@ export function createHandler(assets, scan = scanSite, build = { version: 'devel
     const url = new URL(request.url);
     if (url.pathname === '/api/health') {
       return respond({ service: 'SKALA', version: build.version, build, mode: 'live', backend: 'available',
-        outbound: 'not_checked', capabilities: ['http', 'https', 'redirects', 'dns', 'response-headers', 'cloudflare-detection', 'manual-server-registration'] });
+        outbound: 'not_checked', capabilities: ['http', 'https', 'redirects', 'dns', 'reverse-dns', 'response-headers', 'cloudflare-detection', 'manual-server-registration'] });
     }
     if (url.pathname === '/api/scan') {
       if (request.method !== 'POST') return respond({ error: 'Use POST for a scan.' }, 405, { allow: 'POST' });

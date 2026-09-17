@@ -1,4 +1,4 @@
-# SKALA Basic 0.5.3
+# SKALA Basic 0.5.4
 
 GitHub → Cloudflare deployment and PWA installation: [CLOUDFLARE-SETUP.md](CLOUDFLARE-SETUP.md). Cloudflare's build command is `npm test && npm run build`, with `npx wrangler@latest deploy` as the deploy command. The explicit `wrangler.jsonc` entry uses `dist/server/cloudflare-entry.js`, which checks the runtime-provided Cloudflare Access identity and `SKALA_ALLOWED_EMAILS` before serving any route. The existing Sites entry remains `dist/server/index.js`, for its platform-managed access gate. Do not deploy that unwrapped entry directly to your own account. A standalone GitHub checkout builds without Sites metadata.
 
@@ -6,11 +6,35 @@ The manifest, 192/512px install icons, 180px Apple icon and SVG favicon share th
 
 Overview is the default home page, with Infrastructure, DNS, HTTP & redirects, and Findings tabs. The detail pages share the current report without additional requests. Hash navigation supports direct links and browser back/forward, and tabs support arrow keys, Home and End. Starting another scan clears the old report across every page.
 
-Dark mode is the first-visit default regardless of OS preference. The header theme button switches the whole workspace, and only that preference is saved locally as `skala.theme`. If storage is unavailable, switching still works for the current page. Reports remain in memory only. The standalone review is `review/SKALA-0.5.3-<revision>-Preview.html`; its interface and theme controls work without a hosted backend. Each export has a content-based revision in its filename to keep downloads identifiable.
+Dark mode is the first-visit default regardless of OS preference. The header theme button switches the whole workspace, and only that preference is saved locally as `skala.theme`. If storage is unavailable, switching still works for the current page. Reports remain in memory only. The standalone review is `review/SKALA-0.5.4-<revision>-Preview.html`; its interface and theme controls work without a hosted backend. Each export has a content-based revision in its filename to keep downloads identifiable.
 
 Header design update: a white brand panel with a curved lower right edge over a cyan-lit server photograph. The header adapts for mobile and includes a restrained light sweep that respects reduced motion. The user-supplied server photograph (1000040983.jpg, 1020 × 360) is preserved as JPEG and embedded in the Worker build, so loading it needs no external image service. The photograph fits at its original proportions beside the curved brand panel, in a gently taller responsive header. Soft edge fades blend it into the dark background without cropping the top or bottom. Run `node scripts/preview.mjs` to regenerate the standalone design review.
 
 An animated, dark diagnostics interface with a small server-side HTTP/DNS probe.
+
+## Reverse DNS (0.5.4)
+
+Each scan now resolves public IPv4 and IPv6 addresses back to their PTR hostnames.
+The Server mapping card shows reverse DNS for the exact requested hostname; when no
+manual registration exists, its first PTR hostname is the prominent public hostname.
+Infrastructure and DNS show every checked address, the hostnames using it, PTR values,
+TTL and query outcome. JSON exports include the same evidence under `reverseDNS`.
+
+Shared addresses are queried once, including equivalent IPv6 representations. The
+scan checks up to eight distinct public addresses from the base host, www and redirect
+hosts, prioritizing the requested host. Additional addresses are explicitly counted
+as omitted. Two PTR queries run at a time, within a shared 4.5-second allowance and
+the existing 22-second total scan budget. PTR failures never discard completed HTTP
+results; missing records and resolver failures have different outcomes.
+
+PTR names describe the public endpoint. They may identify a hosting server or a shared
+proxy, and do not become internal registrations or prove the origin behind a CDN.
+Returned names are displayed as escaped text and are never fetched. Forward DNS
+statistics remain separate from PTR query results.
+
+Live IPv4 evidence on 2026-09-14: `213.159.24.244` returned `s09.iclicks.nl.` with
+TTL 600. The reverse lookup for `2a11:800::414` returned NXDOMAIN at that time.
+See [UPGRADE-0.5.4.md](UPGRADE-0.5.4.md) to update an existing 0.5.3 installation.
 
 ## Cloudflare and internal registration
 
@@ -64,6 +88,7 @@ still has no third-party runtime dependencies. See [UPGRADE-0.5.2.md](UPGRADE-0.
 - Status and time to response headers, measured from the SKALA probe.
 - Manual redirect handling, with a five-redirect cap and loop detection.
 - A, AAAA, CNAME, NS, MX and TXT queries through Cloudflare 1.1.1.1 DNS over HTTPS.
+- IPv4/IPv6 reverse DNS using PTR records, with per-address outcomes and evidence.
 - DNS errors remain unknown; they are not reported as absent records.
 - Selected response headers, reported server technology, inspector drawers and JSON export.
 - Distinct reachable, HTTP-only, restricted, HTTP error and unverified states.
@@ -110,9 +135,10 @@ Keep the Site owner-private until broader access and abuse controls are delibera
 ## Verification for this revision
 
 The Node and Worker-runtime suites cover request boundaries, stalled and aborted upload recovery, redirects, entry points, targets, build identity, Cloudflare ranges and evidence attribution, exact registration matches, stale interface state, the Access guard, PWA installation controls and offline behaviour. Detector regressions cover multiple headers on a non-Cloudflare address, IPv6 networks, exact base/www attribution, redirect destinations, badge state and JSON evidence. Interface tests execute the generated
-scripts with a DOM harness; they do not assess browser rendering. Network responses are simulated; the Worker suite exercises native fetch and stream APIs. The original DNS failure and corrected successful scan were both reproduced in workerd. Version 0.5.3 still needs deploying to the user-managed Worker and a fresh scan there.
+scripts with a DOM harness; they do not assess browser rendering. Network responses are simulated; the Worker suite exercises native fetch and stream APIs. The original DNS failure and corrected successful scan were both reproduced in workerd. Reverse DNS tests cover IPv6 expansion, deduplication, PTR aliases, missing records, errors, timeouts, lookup caps, attribution, escaping and report reset. Version 0.5.4 still needs deploying to the user-managed Worker and a fresh scan there.
 
 ## Runtime references
 
 - [Cloudflare Workers Fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
 - [Cloudflare DNS-over-HTTPS JSON format](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/dns-json/)
+- [Cloudflare reverse zones and PTR records](https://developers.cloudflare.com/dns/additional-options/reverse-zones/)

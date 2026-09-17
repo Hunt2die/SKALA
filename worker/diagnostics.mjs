@@ -4,7 +4,7 @@ import { detectCloudflare } from './cloudflare.mjs';
 export { parseTarget, validPublicHostname, ProbeError } from './target.mjs';
 
 const DNS_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
-const TYPES = { A: 1, NS: 2, CNAME: 5, MX: 15, TXT: 16, AAAA: 28 };
+const TYPES = { A: 1, NS: 2, CNAME: 5, PTR: 12, MX: 15, TXT: 16, AAAA: 28 };
 const TYPE_NAMES = Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [v, k]));
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const SAFE_HEADERS = new Set([
@@ -39,6 +39,17 @@ export function isPublicIP(address) {
   if (words[0] === 0x2001 && (words[1] < 0x200 || words[1] === 0xdb8)) return false;
   if (words[0] === 0x2002 || (words[0] === 0x3fff && words[1] <= 0x0fff)) return false;
   return true;
+}
+
+// Reverse only eligible public addresses already returned by a forward DNS query.
+export function reverseDNSName(address) {
+  if (typeof address !== 'string' || !isPublicIP(address)) return null;
+  if (!address.includes(':')) return address.split('.').map(Number).reverse().join('.') + '.in-addr.arpa';
+  const halves = address.toLowerCase().split('::');
+  const left = halves[0] ? halves[0].split(':') : [];
+  const right = halves[1] ? halves[1].split(':') : [];
+  const words = [...left, ...Array(8 - left.length - right.length).fill('0'), ...right];
+  return words.map(word => word.padStart(4, '0')).join('').split('').reverse().join('.') + '.ip6.arpa';
 }
 
 async function limitedText(response, limit = 65536) {
@@ -95,7 +106,8 @@ function failure(error, stage = 'http') {
   if (/invalid redirect value/i.test(error?.message || '')) {
     return { code: 'runtime_redirect_mode', message: 'SKALA used a redirect option unsupported by the Worker runtime. Update the deployed Worker.' };
   }
-  return { code: stage === 'dns' ? 'resolver_network' : 'fetch_failed', message: stage === 'dns'
+  return { code: ['dns', 'ptr'].includes(stage) ? 'resolver_network' : 'fetch_failed', message: stage === 'ptr'
+    ? 'SKALA could not contact the DNS resolver for reverse DNS.' : stage === 'dns'
     ? 'SKALA could not contact the DNS resolver. Website availability has not been established.'
     : 'The website request failed before response headers arrived. Network, TLS or access restrictions may be involved.' };
 }
@@ -134,7 +146,7 @@ export async function scanSite(input, options = {}) {
   const root = target.hostname.startsWith('www.') ? target.hostname.slice(4) : target.hostname;
   const www = 'www.' + root;
 
-  function queryDNS(name, type) {
+  function queryDNS(name, type, queryDeadline = deadline) {
     const key = name + ':' + type;
     if (dnsCache.has(key)) return dnsCache.get(key);
     const promise = (async () => {
@@ -143,7 +155,7 @@ export async function scanSite(input, options = {}) {
         const data = await timedRequest(fetcher, url, {
           // Workers supports follow/manual; reject redirects ourselves without following them.
           headers: { accept: 'application/dns-json' }, redirect: 'manual', cache: 'no-store',
-        }, deadline, dnsTimeout, async response => {
+        }, queryDeadline, dnsTimeout, async response => {
           if (!response.ok) {
             void response.body?.cancel().catch(() => {});
             if (response.status >= 300 && response.status < 400) {
@@ -166,7 +178,7 @@ export async function scanSite(input, options = {}) {
           errorCode: state === 'error' ? 'dns_rcode' : null,
           error: state === 'error' ? 'DNS response code ' + data.Status : null };
       } catch (error) {
-        const problem = failure(error, 'dns');
+        const problem = failure(error, type === 'PTR' ? 'ptr' : 'dns');
         return { name, type, state: 'error', status: null, answers: [], records: [], errorCode: problem.code, error: problem.message };
       }
     })();
@@ -247,6 +259,40 @@ export async function scanSite(input, options = {}) {
   const [queries, https, http] = await Promise.all([
     Promise.all(dnsJobs), trace(target.entryUrls.https), trace(target.entryUrls.http),
   ]);
+  const forwardQueries = await Promise.all(dnsCache.values());
+  const reverseCandidates = new Map();
+  // Keep addresses tied to the queried hostname, including CNAME answers and redirect hosts.
+  // Prioritize the requested hostname when the scan's lookup cap is reached.
+  const addressQueries = forwardQueries.filter(q => q.state === 'ok' && ['A', 'AAAA'].includes(q.type))
+    .sort((a, b) => Number(b.name === target.hostname) - Number(a.name === target.hostname));
+  for (const q of addressQueries) for (const record of q.records) {
+    const name = reverseDNSName(record.value);
+    if (!name || (q.type === 'AAAA') !== record.value.includes(':')) continue;
+    if (!reverseCandidates.has(name)) reverseCandidates.set(name, {
+      address: record.value, family: q.type === 'A' ? 'IPv4' : 'IPv6', sources: [], name,
+    });
+    const item = reverseCandidates.get(name);
+    if (!item.sources.some(source => source.hostname === q.name && source.type === q.type)) {
+      item.sources.push({ hostname: q.name, type: q.type });
+    }
+  }
+  const reverseLimit = 8;
+  const reverseEntries = [...reverseCandidates.values()].slice(0, reverseLimit);
+  const reverseDeadline = Math.min(deadline, Date.now() + (options.reverseBudgetMs || 4500));
+  let reverseIndex = 0;
+  // Two concurrent PTR requests, with one shared budget; failed reverse DNS never changes HTTP health.
+  await Promise.all(Array.from({ length: Math.min(2, reverseEntries.length) }, async () => {
+    while (reverseIndex < reverseEntries.length) {
+      const entry = reverseEntries[reverseIndex++];
+      entry.query = await queryDNS(entry.name, 'PTR', reverseDeadline);
+      entry.hostnames = entry.query.state === 'ok'
+        ? [...new Set(entry.query.records.map(record => record.value.replace(/\.$/, '').toLowerCase()).filter(Boolean))] : [];
+      delete entry.name;
+    }
+  }));
+  const reverseDNS = { entries: reverseEntries, totalAddresses: reverseCandidates.size, limit: reverseLimit,
+    omitted: Math.max(0, reverseCandidates.size - reverseLimit),
+    detail: 'PTR records name the public IP address. They may identify a hosting server or a shared proxy; they do not verify an internal registration or reveal an origin behind a CDN.' };
   const summary = summarize(https, http);
   const entrypoints = { https: summarize(https, { complete: false }), http: summarize(http, { complete: false }) };
   const primary = https.complete ? https : http.complete ? http : https.steps.length ? https : http;
@@ -284,12 +330,13 @@ export async function scanSite(input, options = {}) {
     schemaVersion: 1, mode: 'live', domain: target.hostname, scope: 'homepage', startedAt, checkedAt: new Date().toISOString(),
     vantage: 'SKALA server-side probe', summary, entrypoints, target,
     dns: { resolver: 'Cloudflare 1.1.1.1 (DoH)', name: root, queries, records },
+    reverseDNS,
     https, http,
     environment: { server: last?.headers.server || null, poweredBy: last?.headers['x-powered-by'] || null, os: null, database: null, cms: null, source: 'reported response headers' },
     tls: { httpsResponse: Boolean(secureResponse), responseUrl: secureResponse?.url || null, responseStatus: secureResponse?.status ?? null,
       issuer: null, expiresAt: null, detail: 'HTTPS response availability only. Certificate issuer, expiry and origin TLS are not inspected.' },
     mapping: lookupRegistration(target.hostname),
-    cdn: detectCloudflare(target.hostname, [...await Promise.all(dnsCache.values())], [https, http]),
+    cdn: detectCloudflare(target.hostname, forwardQueries, [https, http]),
     headers: last?.headers || {}, headersUrl: last?.url || null,
     findings,
   };

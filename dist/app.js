@@ -55,7 +55,7 @@ function renderProbeResults(snapshot) {
   const replies = queries.filter(q => q.state !== 'error').length;
   probeChip('Dns', replies === queries.length && replies > 0 ? 'ok' : 'review',
     'DNS: ' + replies + '/' + queries.length + ' replies',
-    'Resolver responses for this scan. A reply may report that a name or record does not exist.');
+    'Forward DNS responses for this scan. PTR lookups are listed separately on the DNS page. A reply may report that a name or record does not exist.');
   for (const [key, id] of [['https','Https'], ['http','Http']]) {
     const trace = snapshot[key], last = trace.steps.at(-1);
     const state = snapshot.entrypoints?.[key]?.state;
@@ -97,6 +97,38 @@ function mappingRows(snapshot) {
   return [['Registered hostname',m.hostname || snapshot.domain],['Internal server',m.server || 'Not registered'],
     ['Hosting group',m.provider || 'Not registered'],['Source',m.source || 'No matching registration'],
     ['Recorded on',m.recordedAt || '—'],['Origin IP','Not verified']];
+}
+function reverseForTarget(snapshot) {
+  return (snapshot.reverseDNS?.entries || []).filter(entry => entry.sources.some(source => source.hostname === snapshot.domain));
+}
+function reverseHostnames(snapshot) {
+  return [...new Set(reverseForTarget(snapshot).flatMap(entry => entry.hostnames))];
+}
+function reverseSummary(snapshot) {
+  if (!snapshot.reverseDNS) return 'Not checked';
+  const entries = reverseForTarget(snapshot), names = reverseHostnames(snapshot);
+  const partial = entries.some(entry => entry.query.state === 'error');
+  if (names.length) return names.slice(0, 3).join(', ') + (names.length > 3 ? ' (+' + (names.length - 3) + ' more)' : '') + (partial ? ' · partial result' : '');
+  return !entries.length ? 'No public address observed' : partial ? 'Could not verify' : 'No PTR record';
+}
+function reverseEvidence(snapshot, includeQueries = false) {
+  const reverse = snapshot.reverseDNS;
+  if (!reverse) return empty('Run a new scan to include reverse DNS.');
+  const data = reverse.entries.flatMap(entry => {
+    const q = entry.query;
+    const outcome = q.state === 'ok' ? 'PTR returned' : q.state === 'error' ? 'Could not verify: ' + q.error : 'No PTR record';
+    const records = q.state === 'ok' ? q.records : [];
+    return (records.length ? records : [null]).map(record => [entry.address,
+      entry.sources.map(source => source.hostname + ' (' + source.type + ')').join(', '),
+      record ? record.value.replace(/\.$/, '') : '—', outcome, record?.ttl ?? '—']);
+  });
+  return (data.length ? table(['IP address','Used by','PTR hostname','Outcome','TTL (s)'], data)
+    : empty('No eligible public address was available for reverse DNS.')) +
+    (reverse.omitted ? '<p class="cdn-evidence-note">' + e(reverse.omitted) + ' additional addresses were not checked (limit ' + e(reverse.limit) + ').</p>' : '') +
+    (includeQueries && reverse.entries.length ? '<h3 class="detail-subheading">PTR query evidence</h3>' +
+      table(['Address','Queried name','Outcome','DNS status','Error code'], reverse.entries.map(entry =>
+        [entry.address,entry.query.name,entry.query.state,entry.query.status ?? '—',entry.query.errorCode || '—'])) : '') +
+    '<p class="cdn-evidence-note">' + e(reverse.detail) + '</p>';
 }
 function cdnPresentation(snapshot) {
   const cdn = snapshot.cdn;
@@ -213,11 +245,12 @@ function renderReport() {
   status(report.summary.state,report.summary.title,report.summary.detail);
 
   const mapping = report.mapping || {};
-  panel('serverPanel','<div class="server-identity"><div><span class="eyebrow">INTERNAL REGISTRATION</span><strong>'+
-    (mapping.server ? '<b>'+e(mapping.server)+'</b> · '+e(mapping.provider) : 'Not registered')+'</strong></div>'+badge(mapping.server?'Manual record':'No match',mapping.server?'blue':'neutral')+'</div>'+
-    rows([['Public IP',address,'mono'],['CDN / proxy',cdnPresentation(report).label],['Origin IP','Not verified','unknown'],
-      ['Record source',mapping.source || 'No matching registration'],['Recorded on',mapping.recordedAt || '—']])+
-    footer('Internal registration is separate from public DNS.','Details','mapping'));
+  const ptrNames = reverseHostnames(report);
+  panel('serverPanel','<div class="server-identity"><div><span class="eyebrow">'+(mapping.server || !ptrNames.length ? 'INTERNAL REGISTRATION' : 'PUBLIC HOSTNAME (PTR)')+'</span><strong>'+
+    (mapping.server ? '<b>'+e(mapping.server)+'</b> · '+e(mapping.provider) : ptrNames.length ? '<b>'+e(ptrNames[0])+'</b>'+(ptrNames.length>1?' <small>+'+(ptrNames.length-1)+' more</small>':'') : 'Not registered')+'</strong></div>'+badge(mapping.server?'Manual record':ptrNames.length?'PTR record':'No match',mapping.server||ptrNames.length?'blue':'neutral')+'</div>'+
+    rows([['Public IP',address,'mono'],['Reverse DNS',reverseSummary(report),'mono'],['Internal server',mapping.server ? mapping.server+' · '+mapping.provider : 'Not registered'],['CDN / proxy',cdnPresentation(report).label],['Origin IP','Not verified','unknown'],
+      ['Registration source',mapping.source || 'No matching registration'],['Recorded on',mapping.recordedAt || '—']])+
+    footer('PTR hostnames describe the public IP.','Details','mapping'));
 
   panel('ipPanel','<div class="card-intro"><span>Public resolver results</span>'+badge('A / AAAA','blue')+'</div><dl class="ip-list">'+
     [root,'www.'+root].flatMap(name=>['A','AAAA'].map(type=>{
@@ -325,9 +358,10 @@ async function runScan(value) {
 
 function detail(key) {
   if(key==='install') return {title:'Install SKALA',html:'<p>Keep SKALA on your home screen or open it in its own window. Sign in at the hosted address before installing.</p>'+table(['Device','How to install'],[['Chrome / Edge','Use Install SKALA or the install option in the browser menu.'],['iPhone / iPad','Open SKALA in Safari. Choose Share → Add to Home Screen → Add.'],['Mac Safari','Choose File → Add to Dock.'],['Other browsers','Use the browser’s install option if available, or bookmark SKALA.']])+'<div class="detail-note"><p>Live scans need an internet connection. Sign-in may be required again when opening the installed app. Reports stay in the open tab; export a report if you want to keep it.</p></div>'};
-  if(key==='about') return {title:'SKALA basic diagnostics',html:'<p>Live HTTP and HTTPS homepage requests, redirect paths, DNS results and reported response headers.</p>'+table(['Check','Scope'],[['Website status','Point-in-time response from the SKALA server'],['Response time','Time until headers arrive; not page-load speed'],['DNS','Cloudflare 1.1.1.1 public resolver'],['SSL','HTTPS response availability only'],['Cloudflare','Public network and response-header signals'],['Internal server mapping','Owner-supplied registrations; no hosting panel sync'],['Storage','Scan results stay in this tab; export JSON to keep a report']])+'<div class="detail-note"><p>No authenticated requests, browser rendering, certificate expiry checks or server changes are performed.</p></div>'};
+  if(key==='about') return {title:'SKALA basic diagnostics',html:'<p>Live HTTP and HTTPS homepage requests, redirect paths, DNS results and reported response headers.</p>'+table(['Check','Scope'],[['Website status','Point-in-time response from the SKALA server'],['Response time','Time until headers arrive; not page-load speed'],['DNS','Cloudflare 1.1.1.1 public resolver'],['Reverse DNS','PTR lookups for up to 8 distinct public IPv4/IPv6 addresses'],['SSL','HTTPS response availability only'],['Cloudflare','Public network and response-header signals'],['Internal server mapping','Owner-supplied registrations; no hosting panel sync'],['Storage','Scan results stay in this tab; export JSON to keep a report']])+'<div class="detail-note"><p>No authenticated requests, browser rendering, certificate expiry checks or server changes are performed.</p></div>'};
   if(!report) return {title:'No scan result yet',html:'<p>Run a check to inspect real observations for the selected domain.</p>'};
-  if(key==='dns') return {title:'DNS evidence',html:'<p>Queried names and resolver outcomes are shown separately. A resolver error does not mean a record is missing.</p>'+table(['Query','Outcome','Error code'],report.dns.queries.map(q=>[q.type+' '+q.name,q.state==='error'?'Unknown: '+q.error:q.state,q.errorCode || '—']))+'<h3 class="detail-subheading">Observed records</h3>'+table(['Type / name','Value / TTL'],report.dns.records.map(r=>[r.type+' '+r.name,r.value+' · '+r.ttl+'s']))};
+  if(key==='dns') return {title:'DNS evidence',html:'<p>Queried names and resolver outcomes are shown separately. A resolver error does not mean a record is missing.</p>'+table(['Query','Outcome','Error code'],report.dns.queries.map(q=>[q.type+' '+q.name,q.state==='error'?'Unknown: '+q.error:q.state,q.errorCode || '—']))+'<h3 class="detail-subheading">Observed records</h3>'+table(['Type / name','Value / TTL'],report.dns.records.map(r=>[r.type+' '+r.name,r.value+' · '+r.ttl+'s']))+'<h3 class="detail-subheading">Reverse DNS (PTR)</h3>'+reverseEvidence(report,true)};
+  if(key==='reverse') return {title:'Reverse DNS (PTR)',html:reverseEvidence(report,true)};
   if(key==='certificate') return {title:'HTTPS / SSL',html:'<p>'+e(report.tls.detail)+'</p>'+table(['Observation','Result'],[['HTTPS response',report.tls.httpsResponse?'Received':'Not confirmed'],['Responding URL',report.tls.responseUrl],['HTTP response',report.tls.responseStatus],['Certificate issuer','Not inspected'],['Certificate expiry','Not inspected'],['Origin TLS behind a proxy','Not inspected']])};
   if(key==='environment') return {title:'Environment evidence',html:'<p>These are the headers reported by the responding endpoint. They may identify a proxy or CDN, and do not prove installed versions.</p>'+table(['Evidence','Value'],[['URL',report.headersUrl],['server',report.environment.server],['x-powered-by',report.environment.poweredBy],['OS / database / CMS','Not inspected']])};
   if(key==='mapping') return {title:'Server registration',html:'<p>This is an owner-supplied record, not a live hosting-panel lookup. Registrations must be updated after migrations.</p>'+table(['Mapping','Value'],mappingRows(report))};

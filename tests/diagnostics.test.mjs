@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTarget, isPublicIP, scanSite } from '../worker/diagnostics.mjs';
+import { parseTarget, isPublicIP, reverseDNSName, scanSite } from '../worker/diagnostics.mjs';
 import { cloudflareNetwork, detectCloudflare } from '../worker/cloudflare.mjs';
 import { lookupRegistration } from '../worker/registration.mjs';
 
@@ -329,4 +329,111 @@ test('manual registration is an exact, sourced match and remains available when 
   assert.equal(r.cdn.state,'unverified');
   assert.equal(r.summary.state,'unverified');
   assert.equal(r.mapping.recordedAt,'2026-09-14');
+});
+
+test('PTR query names reverse IPv4 octets and all 32 expanded IPv6 nibbles', () => {
+  assert.equal(reverseDNSName('213.159.24.244'),'244.24.159.213.in-addr.arpa');
+  const v6='4.1.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.0.1.1.a.2.ip6.arpa';
+  assert.equal(reverseDNSName('2a11:800::414'),v6);
+  assert.equal(reverseDNSName('2A11:0800:0000:0:0:0:0:0414'),v6);
+  assert.equal(reverseDNSName('2606:4700:abcd:1234:5678:90ab:cdef:1234'),
+    '4.3.2.1.f.e.d.c.b.a.0.9.8.7.6.5.4.3.2.1.d.c.b.a.0.0.7.4.6.0.6.2.ip6.arpa');
+  for(const ip of ['127.0.0.1','10.0.0.7','::1','fc00::1','::ffff:127.0.0.1','2001:db8::1','2606:::1','999.1.1.1',null,'']) {
+    assert.equal(reverseDNSName(ip),null,String(ip));
+  }
+});
+
+test('reverse DNS deduplicates shared IPv4/IPv6 addresses and retains PTR aliases, TTL and host attribution', async () => {
+  const ptrCalls=[], webCalls=[];
+  const r=await scanSite(domain,{fetcher:async (input,init)=>{
+    const u=new URL(input);
+    if(u.hostname!=='cloudflare-dns.com') { webCalls.push(u.hostname); return response(200); }
+    const name=u.searchParams.get('name'), type=u.searchParams.get('type');
+    if(type==='PTR') {
+      ptrCalls.push(name);
+      assert.equal(init.redirect,'manual');
+      const cname='244.128-255.24.159.213.in-addr.arpa';
+      return Response.json({Status:0,Answer:name.endsWith('ip6.arpa')
+        ? [{name,type:12,data:'ipv6.host.example.net.',TTL:600}]
+        : [{name,type:5,data:cname+'.',TTL:600},
+           {name:cname,type:12,data:'s09.iclicks.nl.',TTL:600},
+           {name:cname,type:12,data:'shared.host.example.net.',TTL:300}]});
+    }
+    const data=type==='A'?'213.159.24.244':name===domain?'2a11:800::414':'2A11:0800:0:0:0:0:0:0414';
+    return Response.json({Status:0,Answer:['A','AAAA'].includes(type)
+      ? [{name,type:type==='A'?1:28,data,TTL:300}]:[]});
+  }});
+  assert.equal(ptrCalls.length,2);
+  assert.equal(r.reverseDNS.totalAddresses,2);
+  assert.equal(r.reverseDNS.omitted,0);
+  assert.deepEqual(r.reverseDNS.entries[0].hostnames,['s09.iclicks.nl','shared.host.example.net']);
+  assert.equal(r.reverseDNS.entries[0].query.records[0].ttl,600);
+  assert.equal(r.reverseDNS.entries[0].query.answers[0].type,'CNAME');
+  assert.deepEqual(r.reverseDNS.entries[0].sources,[{hostname:domain,type:'A'},{hostname:'www.'+domain,type:'A'}]);
+  assert.deepEqual(r.reverseDNS.entries[1].hostnames,['ipv6.host.example.net']);
+  assert.equal(r.reverseDNS.entries[1].sources.length,2);
+  assert.equal(r.mapping.server,null,'PTR names do not become registered internal servers');
+  assert.equal(r.cdn.state,'not_observed');
+  assert.equal(r.summary.state,'reachable');
+  assert.ok(webCalls.every(host=>host===domain),'Never request a hostname supplied by PTR');
+});
+
+test('missing PTR records and resolver failures remain distinct without changing website health', async () => {
+  for(const [ptrReply,state,code] of [
+    [()=>Response.json({Status:0,Answer:[]}), 'no_data', null],
+    [()=>Response.json({Status:3}), 'nxdomain', null],
+    [()=>Response.json({Status:2}), 'error', 'dns_rcode'],
+    [()=>response(503), 'error', 'resolver_error'],
+    [()=>response(302,{location:'https://unexpected.example.net/'}), 'error', 'resolver_redirect'],
+    [()=>new Response('not json'), 'error', 'resolver_format'],
+  ]) {
+    const f=fixture();
+    const r=await scanSite(domain,{fetcher:(input,init)=>new URL(input).searchParams.get('type')==='PTR'
+      ? ptrReply():f.fetcher(input,init)});
+    const entry=r.reverseDNS.entries[0];
+    assert.equal(entry.query.state,state);
+    assert.equal(entry.query.errorCode,code);
+    assert.deepEqual(entry.hostnames,[]);
+    assert.equal(r.summary.state,'reachable');
+    assert.equal(r.dns.queries.length,9);
+    assert.ok(!r.findings.some(f=>f.id==='dns_partial'));
+  }
+});
+
+test('reverse lookups have a shared deadline and never discard completed HTTP results', async () => {
+  const f=fixture();
+  let aborted=0;
+  const r=await scanSite(domain,{reverseBudgetMs:15,budgetMs:500,fetcher:(input,init)=>{
+    if(new URL(input).searchParams.get('type')==='PTR') return new Promise((resolve,reject)=>{
+      init.signal.addEventListener('abort',()=>{aborted++;reject(new Error('aborted'));},{once:true});
+    });
+    return f.fetcher(input,init);
+  }});
+  assert.equal(aborted,1);
+  assert.equal(r.reverseDNS.entries[0].query.errorCode,'timeout');
+  assert.equal(r.summary.state,'reachable');
+  assert.equal(r.headers.server,'nginx');
+});
+
+test('PTR collection is capped, excludes private addresses and keeps redirect hostname evidence separate', async () => {
+  const ptrCalls=[];
+  const r=await scanSite(domain,{fetcher:async input=>{
+    const u=new URL(input);
+    if(u.hostname!=='cloudflare-dns.com') return u.hostname===domain
+      ? response(302,{location:'https://elsewhere.example.net/'}) : response(200);
+    const name=u.searchParams.get('name'),type=u.searchParams.get('type');
+    if(type==='PTR') { ptrCalls.push(name); return Response.json({Status:0,Answer:[{name,type:12,data:'ptr.example.net.',TTL:60}]}); }
+    return Response.json({Status:0,Answer:type==='A'
+      ? Array.from({length:name==='elsewhere.example.net'?10:1},(_,i)=>({name,type:1,data:name==='elsewhere.example.net'?'93.184.216.'+(40+i):'213.159.24.244',TTL:300})):[]});
+  }});
+  assert.equal(r.reverseDNS.totalAddresses,11);
+  assert.equal(r.reverseDNS.entries.length,8);
+  assert.equal(ptrCalls.length,8);
+  assert.equal(r.reverseDNS.omitted,3);
+  assert.equal(r.reverseDNS.entries[0].address,'213.159.24.244');
+  assert.deepEqual(r.reverseDNS.entries[1].sources,[{hostname:'elsewhere.example.net',type:'A'}]);
+  const privateFixture=fixture({address:'10.0.0.7'});
+  const privateReport=await scanSite(domain,{fetcher:privateFixture.fetcher});
+  assert.deepEqual(privateReport.reverseDNS.entries,[]);
+  assert.ok(!privateFixture.calls.some(call=>new URL(call.url).searchParams.get('type')==='PTR'));
 });

@@ -293,3 +293,63 @@ test('confirmed redirect networks take priority over ambiguous entry headers wit
   assert.equal(h.run('report.cdn.state'),'possible');
   assert.equal(h.run('report.cdn.otherHosts[0].state'),'detected');
 });
+
+test('PTR hostnames appear prominently, remain distinct from registration, export faithfully and clear on the next scan', async () => {
+  const make=async failed=>({...await scanSite('iclicks.nl',{fetcher:async input=>{
+    const u=new URL(input),type=u.searchParams.get('type'),name=u.searchParams.get('name');
+    if(u.hostname!=='cloudflare-dns.com') return new Response(null,{status:200});
+    if(type==='PTR') return failed ? new Response(null,{status:503}) : Response.json({Status:0,Answer:[
+      {name,type:12,data:'s09.iclicks.nl.',TTL:600}
+    ]});
+    return Response.json({Status:0,Answer:type==='A'?[{name,type:1,data:'213.159.24.244',TTL:300}]:[]});
+  }}),build});
+  const queue=[await make(false),await make(true),await snapshot(),null];
+  const h=harness(async path=>{
+    if(path==='/api/health') return freshHealth();
+    const next=queue.shift();
+    if(!next) throw new Error('offline');
+    return Response.json(next);
+  });
+  await h.run('runScan("iclicks.nl")');
+  assert.match(h.get('#serverPanel .panel-content').innerHTML,/PUBLIC HOSTNAME \(PTR\)/);
+  assert.match(h.get('#serverPanel .panel-content').innerHTML,/<b>s09\.iclicks\.nl<\/b>/);
+  assert.match(h.get('#serverPanel .panel-content').innerHTML,/Internal server<\/dt><dd class="">Not registered/);
+  assert.equal(h.get('#registeredServer').hidden,true);
+  for(const id of ['#view-infrastructure','#view-dns']) {
+    assert.match(h.get(id).innerHTML,/s09\.iclicks\.nl/);
+    assert.match(h.get(id).innerHTML,/213\.159\.24\.244/);
+  }
+  assert.match(h.run('detail("reverse").html'),/244\.24\.159\.213\.in-addr\.arpa/);
+  assert.match(h.run('detail("dns").html'),/s09\.iclicks\.nl/);
+  h.run('exportReport()');
+  const exported=JSON.parse(await h.blob().text());
+  assert.deepEqual(exported.reverseDNS.entries[0].hostnames,['s09.iclicks.nl']);
+  assert.equal(exported.reverseDNS.entries[0].query.records[0].ttl,600);
+  assert.equal(exported.mapping.server,null);
+  await h.run('runScan("iclicks.nl")');
+  assert.match(h.get('#serverPanel .panel-content').innerHTML,/Could not verify/);
+  assert.equal(h.get('#statusCard').dataset.state,'reachable');
+  assert.match(h.get('#view-dns').innerHTML,/resolver_error/);
+  assert.doesNotMatch(h.get('#view-infrastructure').innerHTML,/s09\.iclicks\.nl/);
+  await h.run('runScan("alpha.example.com")');
+  assert.match(h.get('#serverPanel .panel-content').innerHTML,/No PTR record/);
+  assert.doesNotMatch(h.get('#serverPanel .panel-content').innerHTML,/s09\.iclicks\.nl/);
+  await h.run('runScan("alpha.example.com")');
+  assert.equal(h.run('report'),null);
+  assert.doesNotMatch(h.get('#view-dns').innerHTML,/213\.159\.24\.244/);
+});
+
+test('PTR values are rendered as escaped evidence, never interpreted as HTML', async () => {
+  const result=await scanSite('alpha.example.com',{fetcher:async input=>{
+    const u=new URL(input),name=u.searchParams.get('name'),type=u.searchParams.get('type');
+    if(u.hostname!=='cloudflare-dns.com') return new Response(null,{status:200});
+    return Response.json({Status:0,Answer:type==='A'?[{name,type:1,data:'213.159.24.244',TTL:300}]
+      :type==='PTR'?[{name,type:12,data:'<img src=x onerror=alert(1)>.',TTL:60}]:[]});
+  }});
+  const h=harness(async path=>path==='/api/health'?freshHealth():Response.json({...result,build}));
+  await h.run('runScan("alpha.example.com")');
+  for(const html of [h.get('#serverPanel .panel-content').innerHTML,h.get('#view-infrastructure').innerHTML,h.run('detail("reverse").html')]) {
+    assert.match(html,/&lt;img/);
+    assert.doesNotMatch(html,/<img/);
+  }
+});
